@@ -1,20 +1,30 @@
 import { Request, Response } from "express";
-import { User } from "@prisma/client";
 import { genSalt, hash } from "bcrypt";
-import jwt, { SignOptions } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
+import { Membership, User } from "@prisma/client";
+import dotenv from "dotenv";
+import { findUserById } from "../services/user.service";
+
+dotenv.config();
+
+interface UserWithMembership extends User {
+  membership?: Membership;
+}
 
 const secretKey = process.env.JWT_SECRET_KEY;
-export function generateJWT(user: User, info?: string | { [key: string]: any } | null, expiresIn?: SignOptions["expiresIn"]) {
+export function generateJWT(user: any) {
   const token = jwt.sign(
     {
       id: user.id,
+      username: user.username,
       email: user.email,
-      info: info,
-      googleId: user?.facebookId,
+      facebookId: user.facebookId,
+      googleId: user.googleId,
+      membership: user.membership,
     },
     secretKey!,
     {
-      expiresIn: expiresIn || "1d",
+      expiresIn: "1d",
     }
   );
   return token;
@@ -34,8 +44,8 @@ export async function generateHashedPassword(password: string) {
 export function tokenVerification(req: Request, res: Response) {
   try {
     const { token, secret } = req.query;
-    const user = jwt.verify(token as string, secret as string);
-    res.status(200).json(user);
+    const decodedUser = jwt.verify(token as string, secret as string);
+    res.status(200).json(decodedUser);
   } catch (error) {
     console.error(error);
   }

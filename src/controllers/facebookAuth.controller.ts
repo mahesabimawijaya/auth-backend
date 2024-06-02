@@ -1,14 +1,15 @@
-import passport from "passport";
 import express, { Request, Response } from "express";
+import passport from "passport";
+import { User } from "@prisma/client";
+import { generateJWT } from "./auth";
 import dotenv from "dotenv";
 import { prisma } from "../services/prisma.service";
-import { generateJWT } from "./auth";
-import { User } from "@prisma/client";
+import { createByFacebook, findUserByEmail, findUserById, updateFacebookId } from "../services/user.service";
 const FacebookStrategy = require("passport-facebook").Strategy;
 
-const router = express.Router();
 dotenv.config();
 
+const router = express.Router();
 const webURL = process.env.WEB_URL;
 
 passport.use(
@@ -20,37 +21,40 @@ passport.use(
       profileFields: ["id", "displayName", "email"],
     },
     async function (accessToken: any, refreshToken: any, profile: any, cb: any) {
-      const user = await prisma.user.findUnique({
-        where: {
-          facebookId: profile.id,
-        },
-      });
-      if (!user) {
-        console.log(profile);
-        const user = await prisma.user.create({
-          data: {
-            username: profile.displayName,
-            facebookId: profile.id,
-            email: profile.emails.length > 0 ? profile.emails[0].value : "no email",
-          },
-        });
-        console.log(user);
+      try {
+        const user = await findUserByEmail(profile.emails[0].value);
+        if (user && !user.facebookId) {
+          const updatedUser = await updateFacebookId(user.id, profile.id);
+          return cb(null, updatedUser);
+        }
+        if (!user) {
+          const user = await prisma.user.create({
+            data: {
+              username: profile.displayName,
+              facebookId: profile.id,
+              email: profile.emails.length > 0 ? profile.emails[0].value : "no email",
+            },
+          });
+          console.log(user);
+          return cb(null, profile);
+        }
         return cb(null, profile);
-      } else {
-        return cb(null, profile);
+      } catch (error) {
+        console.error(error);
+        cb(error, null);
       }
     }
   )
 );
 
 passport.serializeUser((user: any, done) => {
-  done(null, user.id); // Serialize user.id into the session
+  done(null, user.id);
 });
 
 passport.deserializeUser(async (id: number, done) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id } });
-    done(null, user); // Deserialize user from the session using user.id
+    const user = await findUserById(id);
+    done(null, user);
   } catch (error) {
     done(error, null);
   }
@@ -62,10 +66,11 @@ router.get(
   passport.authenticate("facebook", {
     failureRedirect: `${webURL}auth/facebook/error`,
   }),
-  function (req: Request, res: Response) {
-    const token = generateJWT(req.user as User);
+  async function (req: any, res: Response) {
+    const user = await findUserByEmail(req.user?.emails[0].value);
+    const token = generateJWT(user as User);
     res.cookie("astronacci-auth-token", token, { maxAge: 1000 * 60 * 60 * 24 });
-    res.redirect(`${webURL}/auth/facebook/success`);
+    res.redirect(`${webURL}`);
   }
 );
 

@@ -9,6 +9,27 @@ export async function findUserByEmail(email: string) {
     where: {
       email,
     },
+    include: {
+      membership: true,
+    },
+  });
+}
+export async function findMembershipByEmail(email: string) {
+  return await prisma.membership.findUnique({
+    where: {
+      email,
+    },
+  });
+}
+
+export async function findUserById(Id: number) {
+  return await prisma.user.findUnique({
+    where: {
+      id: Id,
+    },
+    include: {
+      membership: true,
+    },
   });
 }
 
@@ -29,6 +50,19 @@ export async function createByFacebook(email: string, username: string, facebook
       email: email,
       username: username,
       facebookId: facebookId,
+    },
+  });
+}
+
+export async function createMembership(email: string, password: string, type: string, userId: number, articles: number, videos: number) {
+  return await prisma.membership.create({
+    data: {
+      email,
+      password,
+      type,
+      userId,
+      articles,
+      videos,
     },
   });
 }
